@@ -47,6 +47,7 @@ class TextFileSongStrategy : SongLoadingStrategy {
 
             // B. Parse Decorator Factory Closures
             val effects = mutableListOf<(AudioStream) -> AudioStream>()
+            val noteDurations = mutableListOf<Double>()
             for (j in 1 until configTokens.size) {
                 val effectToken = configTokens[j]
                 val parts = effectToken.split("$")
@@ -65,7 +66,8 @@ class TextFileSongStrategy : SongLoadingStrategy {
                                 decoratedStream = stream,
                                 attackEnd = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0,
                                 decayEnd = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0,
-                                sustain = parts.getOrNull(3)?.toDoubleOrNull() ?: 1.0
+                                sustain = parts.getOrNull(3)?.toDoubleOrNull() ?: 1.0,
+                                noteDurations = noteDurations
                             )
                         }
                     }
@@ -98,6 +100,7 @@ class TextFileSongStrategy : SongLoadingStrategy {
                 val duration = durationStr.toDoubleOrNull() ?: 1.0
 
                 notes.add(Note(pitch, duration))
+                noteDurations.add(duration)
             }
 
             // Assemble into our verified structural format

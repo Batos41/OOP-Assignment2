@@ -10,15 +10,17 @@ class ADSDecoratorTests {
     fun testZeroLengthAttackAndDecayBranches() {
         // Arrange: Expand allocation to 300 so index 250 is safely within bounds
         val rawStream = AudioStream { _, _ -> DoubleArray(300) { 1.0 } }
+        // 300 samples total at 1000 Hz / 120 BPM equals a single note lasting 0.6 beats
+        val singleNoteDuration = listOf(0.6)
 
         // Edge Case 1: Instant attack (attackEnd = 0.0)
-        val instantAttack = ADSDecorator(rawStream, 0.0, 0.5, 0.5)
+        val instantAttack = ADSDecorator(rawStream, 0.0, 0.5, 0.5, singleNoteDuration)
         val instantAttackSamples = instantAttack.getSamples(sampleRate, tempo)
         // t = 0.0 should instantly skip the attack fraction branch and be 1.0 or entering decay
         assertEquals(1.0, instantAttackSamples[0], 0.001)
 
         // Edge Case 2: Instant decay (decayEnd equals attackEnd)
-        val instantDecay = ADSDecorator(rawStream, 0.2, 0.2, 0.3)
+        val instantDecay = ADSDecorator(rawStream, 0.2, 0.2, 0.3, singleNoteDuration)
         val instantDecaySamples = instantDecay.getSamples(sampleRate, tempo)
 
         // At t = 0.25s (sample index 250), which is > decayEnd (0.2s),
@@ -28,9 +30,10 @@ class ADSDecoratorTests {
 
     @Test
     fun testEnvelopePhases() {
-        // Arrange: 1 second of constant 1.0 samples
+        // Arrange: 1 second of constant 1.0 samples (1000 samples = 2.0 beats at 120 BPM)
         val rawStream = AudioStream { _, _ -> DoubleArray(1000) { 1.0 } }
-        val adsStream = ADSDecorator(rawStream, 0.2, 0.5, 0.4)
+        val singleNoteDuration = listOf(2.0)
+        val adsStream = ADSDecorator(rawStream, 0.2, 0.5, 0.4, singleNoteDuration)
 
         // Act
         val samples = adsStream.getSamples(sampleRate, tempo)
@@ -47,14 +50,15 @@ class ADSDecoratorTests {
     fun testSkippedPhasesCoverage() {
         // Allocate 300 samples so index 250 is well within bounds
         val rawStream = AudioStream { _, _ -> DoubleArray(300) { 1.0 } }
+        val singleNoteDuration = listOf(0.6)
 
         // Test 1: Instant Attack (attackEnd = 0.0) -> Skips attack branch completely
-        val instantAttack = ADSDecorator(rawStream, 0.0, 0.5, 0.5)
+        val instantAttack = ADSDecorator(rawStream, 0.0, 0.5, 0.5, singleNoteDuration)
         val instantAttackSamples = instantAttack.getSamples(sampleRate, tempo)
         assertEquals(1.0, instantAttackSamples[0], 0.001)
 
         // Test 2: Instant Decay (decayEnd = attackEnd = 0.2)
-        val instantDecay = ADSDecorator(rawStream, 0.2, 0.2, 0.3)
+        val instantDecay = ADSDecorator(rawStream, 0.2, 0.2, 0.3, singleNoteDuration)
         val instantDecaySamples = instantDecay.getSamples(sampleRate, tempo)
 
         // At t = 0.25s (index 250), we are past the thresholds,
@@ -67,8 +71,11 @@ class ADSDecoratorTests {
         // Arrange: Create a stream representing 2 notes, each lasting 0.5 seconds (500 samples each, 1000 total)
         val rawStream = AudioStream { _, _ -> DoubleArray(1000) { 1.0 } }
 
+        // 500 samples at 1000 Hz is exactly 0.5 seconds per note, which equals 1.0 beat per note at 120 BPM
+        val sequentialNotesDurations = listOf(1.0, 1.0)
+
         // Attack ends at 0.1s, Decay ends at 0.3s, Sustain holds at 0.5
-        val adsStream = ADSDecorator(rawStream, 0.1, 0.3, 0.5)
+        val adsStream = ADSDecorator(rawStream, 0.1, 0.3, 0.5, sequentialNotesDurations)
 
         // Act
         val samples = adsStream.getSamples(sampleRate, tempo)
