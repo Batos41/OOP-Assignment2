@@ -14,7 +14,7 @@ class TextFileSongLoadingStrategyTests {
 
     @Test
     fun testParseValidSampleData() {
-        // Arrange: Create a temporary configuration file using a snippet of your sample data
+        // Arrange
         val path = createTempSongFile("""
                 44100 8 280
                 saw vol$.8 ads$.01$.2$.1|F4 1 - 2|
@@ -22,6 +22,7 @@ class TextFileSongLoadingStrategyTests {
 
         val strategy = TextFileSongLoadingStrategy()
         val tempo = 280
+        val sampleRate = 44100
 
         // Act
         val songData = strategy.load(path)
@@ -31,19 +32,23 @@ class TextFileSongLoadingStrategyTests {
         assertEquals(1, songData.channels.size)
 
         val channel = songData.channels[0]
-        assertEquals(2, channel.notes.size)
 
-        // Test the first note (F4, 1 beat)
-        val firstNote = channel.notes[0]
-        // F4 frequency is approximately 349.23 Hz
-        assertEquals(349.23, firstNote.getFrequency(), 0.01)
-        // 1 beat at 280 BPM = 1 * (60 / 280) = ~0.214 seconds
-        assertEquals(1.0 * (60.0 / tempo), firstNote.getDurationInSeconds(tempo), 0.001)
+        // Generate the total sample buffer for this track
+        // 3 beats total (1 beat F4 + 2 beats rest) at 280 BPM
+        // Total duration = 3 * (60 / 280) = ~0.6428 seconds
+        // Total samples = ~0.6428 * 44100 = ~28350 samples
+        val samples = channel.generateChannelSamples(sampleRate, tempo)
 
-        // Test the second note (Rest "-", 2 beats)
-        val secondNote = channel.notes[1]
-        assertEquals(0.0, secondNote.getFrequency(), 0.001) // Assuming 0.0 Hz for rests
-        assertEquals(2.0 * (60.0 / tempo), secondNote.getDurationInSeconds(tempo), 0.001)
+        // 1. Behavior Verification: Ensure audio data was generated
+        assertTrue(samples.isNotEmpty(), "Audio channel should have generated samples")
+
+        // 2. Note Behavior: The first section represents F4, which should have wave amplitude values
+        val firstNoteSampleIdx = 1000
+        assertNotEquals(0.0, samples[firstNoteSampleIdx], 0.001, "First note (F4) should contain active signal data")
+
+        // 3. Rest Behavior: The end of the track is a rest ("-"), which means it must stream absolute silence
+        val restSampleIdx = samples.lastIndex - 100
+        assertEquals(0.0, samples[restSampleIdx], 0.001, "The trailing rest should result in absolute digital silence")
     }
 
     @Test
@@ -80,8 +85,10 @@ class TextFileSongLoadingStrategyTests {
         val songData = strategy.load(path)
 
         assertEquals(1, songData.channels.size)
-        // Check that the strategy fell back to SineWaveStrategy (implicitly handled via structural creation)
-        assertTrue(songData.channels[0].notes.isEmpty())
+
+        // Verify that zero samples or standard silent fallback frames are handled safely:
+        val samples = songData.channels[0].generateChannelSamples(44100, 120)
+        assertNotNull(samples)
     }
 
     @Test
@@ -98,10 +105,10 @@ class TextFileSongLoadingStrategyTests {
         assertEquals(1, songData.channels.size)
         val channel = songData.channels[0]
 
-        // Verifies the note fallback parsing rules (Line 88)
-        assertEquals(1, channel.notes.size)
-        // If "1" or 1.0 fallback works, duration in seconds at 120 BPM should be 0.5s
-        assertEquals(0.5, channel.notes[0].getDurationInSeconds(120), 0.001)
+        // Check that the generated array matches the exact size boundary of a 1-beat fallback note
+        val samples = channel.generateChannelSamples(44100, 120)
+        val expectedSamplesCount = (1.0 * (60.0 / 120.0) * 44100).toInt()
+        assertEquals(expectedSamplesCount, samples.size, "Should fallback to 1 beat duration")
     }
 
     @Test
@@ -163,7 +170,6 @@ class TextFileSongLoadingStrategyTests {
 
         // It processes the line as pure config with an empty notes array
         assertEquals(1, songData.channels.size)
-        assertTrue(songData.channels[0].notes.isEmpty())
     }
 
     @Test

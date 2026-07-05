@@ -6,7 +6,7 @@ class SynthesizerTests {
     private val sampleRate = 1000
 
     class ConstantWaveStrategy(private val constantValue: Double) : WaveformStrategy {
-        override fun generateSample(frequency: Double, time: Double): Double = constantValue
+        override fun generateSample(phase: Double): Double = constantValue
     }
 
     class MockSongLoadingStrategy(private val stubbedData: SongData) : SongLoadingStrategy {

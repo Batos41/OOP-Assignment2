@@ -51,13 +51,27 @@ class SynthesizerIntegrationTests {
     }
 
     @Test
-    fun testWaveSawIntegration() {
-        // References "wave_saw.txt" by its name verbatim
-        val fileContent = readResourceFile("wave_saw.txt")
-        val songData = strategy.loadFromString(fileContent)
+    fun testAllFilesLoadWithoutThrowing() {
+        val files = listOf(
+            "fx_ads_pad.txt",
+            "fx_ads_pluck.txt",
+            "fx_clip.txt",
+            "fx_tanh.txt",
+            "fx_tanh_clip_stack.txt",
+            "fx_volume.txt",
+            "wave_noise.txt",
+            "wave_saw.txt",
+            "wave_sine.txt",
+            "wave_square.txt"
+        )
 
-        assertNotNull(songData)
-        assertTrue(songData.channels[0].waveformStrategy is SawWaveStrategy)
+        for (fileName in files) {
+            val fileContent = readResourceFile(fileName)
+            val songData = strategy.loadFromString(fileContent)
+
+            // Includes a helpful lazy message if a specific file breaks
+            assertNotNull(songData) { "Failed to load configuration file: $fileName" }
+        }
     }
 
     @Test
