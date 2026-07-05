@@ -361,4 +361,19 @@ class TextFileSongLoadingStrategyTests {
         val causeMessage = exception.cause?.message ?: ""
         assertTrue(causeMessage.contains("requires explicitly formatted parameters"))
     }
+
+    @Test
+    fun testThrowOnInvalidBeatsPerMeasureToken() {
+        // Triggers the exception when the second header token cannot be parsed into an Integer
+        val path = createTempSongFile("44100 abc 120")
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        val causeMessage = exception.cause?.message ?: ""
+        assertTrue(
+            causeMessage.contains("Beats per measure 'abc' must be a valid integer"),
+            "Expected beats-per-measure integer parsing failure, but got: $causeMessage"
+        )
+    }
 }

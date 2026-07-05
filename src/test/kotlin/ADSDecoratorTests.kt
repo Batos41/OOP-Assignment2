@@ -10,21 +10,18 @@ class ADSDecoratorTests {
     fun testZeroLengthAttackAndDecayBranches() {
         // Arrange: Expand allocation to 300 so index 250 is safely within bounds
         val rawStream = AudioStream { _, _ -> DoubleArray(300) { 1.0 } }
-        // 300 samples total at 1000 Hz / 120 BPM equals a single note lasting 0.6 beats
         val singleNoteDuration = listOf(0.6)
+        val isNoteList = listOf(true) // Marks the segment as a playable note
 
         // Edge Case 1: Instant attack (attackEnd = 0.0)
-        val instantAttack = ADSDecorator(rawStream, 0.0, 0.5, 0.5, singleNoteDuration)
+        val instantAttack = ADSDecorator(rawStream, 0.0, 0.5, 0.5, singleNoteDuration, isNoteList)
         val instantAttackSamples = instantAttack.getSamples(sampleRate, tempo)
-        // t = 0.0 should instantly skip the attack fraction branch and be 1.0 or entering decay
         assertEquals(1.0, instantAttackSamples[0], 0.001)
 
         // Edge Case 2: Instant decay (decayEnd equals attackEnd)
-        val instantDecay = ADSDecorator(rawStream, 0.2, 0.2, 0.3, singleNoteDuration)
+        val instantDecay = ADSDecorator(rawStream, 0.2, 0.2, 0.3, singleNoteDuration, isNoteList)
         val instantDecaySamples = instantDecay.getSamples(sampleRate, tempo)
 
-        // At t = 0.25s (sample index 250), which is > decayEnd (0.2s),
-        // it should cleanly be at the sustain level of 0.3
         assertEquals(0.3, instantDecaySamples[250], 0.001)
     }
 
@@ -33,7 +30,8 @@ class ADSDecoratorTests {
         // Arrange: 1 second of constant 1.0 samples (1000 samples = 2.0 beats at 120 BPM)
         val rawStream = AudioStream { _, _ -> DoubleArray(1000) { 1.0 } }
         val singleNoteDuration = listOf(2.0)
-        val adsStream = ADSDecorator(rawStream, 0.2, 0.5, 0.4, singleNoteDuration)
+        val isNoteList = listOf(true)
+        val adsStream = ADSDecorator(rawStream, 0.2, 0.5, 0.4, singleNoteDuration, isNoteList)
 
         // Act
         val samples = adsStream.getSamples(sampleRate, tempo)
@@ -48,49 +46,64 @@ class ADSDecoratorTests {
 
     @Test
     fun testSkippedPhasesCoverage() {
-        // Allocate 300 samples so index 250 is well within bounds
         val rawStream = AudioStream { _, _ -> DoubleArray(300) { 1.0 } }
         val singleNoteDuration = listOf(0.6)
+        val isNoteList = listOf(true)
 
-        // Test 1: Instant Attack (attackEnd = 0.0) -> Skips attack branch completely
-        val instantAttack = ADSDecorator(rawStream, 0.0, 0.5, 0.5, singleNoteDuration)
+        // Test 1: Instant Attack (attackEnd = 0.0)
+        val instantAttack = ADSDecorator(rawStream, 0.0, 0.5, 0.5, singleNoteDuration, isNoteList)
         val instantAttackSamples = instantAttack.getSamples(sampleRate, tempo)
         assertEquals(1.0, instantAttackSamples[0], 0.001)
 
         // Test 2: Instant Decay (decayEnd = attackEnd = 0.2)
-        val instantDecay = ADSDecorator(rawStream, 0.2, 0.2, 0.3, singleNoteDuration)
+        val instantDecay = ADSDecorator(rawStream, 0.2, 0.2, 0.3, singleNoteDuration, isNoteList)
         val instantDecaySamples = instantDecay.getSamples(sampleRate, tempo)
 
-        // At t = 0.25s (index 250), we are past the thresholds,
-        // so it must hold flat at the sustain level of 0.3
         assertEquals(0.3, instantDecaySamples[250], 0.001)
     }
 
     @Test
     fun testEnvelopeResetsOnSubsequentNotes() {
-        // Arrange: Create a stream representing 2 notes, each lasting 0.5 seconds (500 samples each, 1000 total)
         val rawStream = AudioStream { _, _ -> DoubleArray(1000) { 1.0 } }
-
-        // 500 samples at 1000 Hz is exactly 0.5 seconds per note, which equals 1.0 beat per note at 120 BPM
         val sequentialNotesDurations = listOf(1.0, 1.0)
+        val isNoteList = listOf(true, true) // Both segments are active notes
 
-        // Attack ends at 0.1s, Decay ends at 0.3s, Sustain holds at 0.5
-        val adsStream = ADSDecorator(rawStream, 0.1, 0.3, 0.5, sequentialNotesDurations)
-
-        // Act
+        val adsStream = ADSDecorator(rawStream, 0.1, 0.3, 0.5, sequentialNotesDurations, isNoteList)
         val samples = adsStream.getSamples(sampleRate, tempo)
 
-        // --- Note 1 Verification ---
-        assertEquals(0.0, samples[0], 0.001)   // Note 1: Start of attack (t = 0.0s)
-        assertEquals(1.0, samples[100], 0.001) // Note 1: Peak of attack (t = 0.1s)
-        assertEquals(0.5, samples[400], 0.001) // Note 1: Flat sustain phase (t = 0.4s)
+        // --- Note 1 ---
+        assertEquals(0.0, samples[0], 0.001)
+        assertEquals(1.0, samples[100], 0.001)
+        assertEquals(0.5, samples[400], 0.001)
 
-        // --- Note 2 Verification (The Re-trigger Check) ---
-        // If the envelope is resetting correctly, index 500 is the start of Note 2.
-        // It should drop back down to 0.0 to begin the attack phase again!
-        assertEquals(0.0, samples[500], 0.001) // Note 2: Start of attack (Should reset to 0.0)
+        // --- Note 2 ---
+        assertEquals(0.0, samples[500], 0.001) // Confirms re-trigger reset drops to 0.0
+        assertEquals(1.0, samples[600], 0.001)
+    }
 
-        // Index 600 is 0.1 seconds into Note 2. It should reach peak amplitude again.
-        assertEquals(1.0, samples[600], 0.001) // Note 2: Peak of attack
+    @Test
+    fun testEnvelopeBypassesRests() {
+        // Arrange: 1500 samples total (3 segments of 500 samples each)
+        val rawStream = AudioStream { _, _ -> DoubleArray(1500) { 1.0 } }
+
+        // Sequence: Note (1.0 beat), Rest (1.0 beat), Note (1.0 beat)
+        val trackDurations = listOf(1.0, 1.0, 1.0)
+        val isNoteList = listOf(true, false, true) // Middle segment is a rest
+
+        val adsStream = ADSDecorator(rawStream, 0.1, 0.3, 0.5, trackDurations, isNoteList)
+        val samples = adsStream.getSamples(sampleRate, tempo)
+
+        // Segment 1 (Note): Applies attack envelope
+        assertEquals(0.0, samples[0], 0.001)
+        assertEquals(1.0, samples[100], 0.001)
+
+        // Segment 2 (Rest): Envelope logic is bypassed. Signal left unmodified (1.0)
+        // (The mixer pipeline handles downstream silence, avoiding timeline drift)
+        assertEquals(1.0, samples[500], 0.001)
+        assertEquals(1.0, samples[750], 0.001)
+
+        // Segment 3 (Note): Retriggers cleanly starting at sample index 1000
+        assertEquals(0.0, samples[1000], 0.001)
+        assertEquals(1.0, samples[1100], 0.001)
     }
 }

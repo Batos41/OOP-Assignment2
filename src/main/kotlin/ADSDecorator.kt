@@ -3,7 +3,8 @@ class ADSDecorator(
     private val attackEnd: Double,
     private val decayEnd: Double,
     private val sustain: Double,
-    private val noteDurations: List<Double>
+    private val noteDurationsBeats: List<Double>,
+    private val isNoteList: List<Boolean> // True for active pitch notes, False for rests ("-")
 ) : EffectDecorator(decoratedStream) {
 
     init {
@@ -18,41 +19,45 @@ class ADSDecorator(
 
         // Convert the note durations from beats into exact sample counts
         val secondsPerBeat = 60.0 / tempo
-        val noteSampleLengths = noteDurations.map { beats ->
+        val noteSampleLengths = noteDurationsBeats.map { beats ->
             (beats * secondsPerBeat * sampleRate).toInt()
         }
 
         var currentNoteIndex = 0
-        var samplesProcessedInCurrentNote = 0
+        var samplesProcessedInCurrentSegment = 0
 
         for (i in samples.indices) {
-            // If we've passed the length of the current note, move to the next note and reset the timer
+            // Guard/Advance block across note boundaries
             if (currentNoteIndex < noteSampleLengths.size &&
-                samplesProcessedInCurrentNote >= noteSampleLengths[currentNoteIndex]) {
-
-                samplesProcessedInCurrentNote = 0
+                samplesProcessedInCurrentSegment >= noteSampleLengths[currentNoteIndex]) {
+                samplesProcessedInCurrentSegment = 0
                 currentNoteIndex++
             }
 
-            // Calculate time relative to the current note's exact start boundary
-            val currentTime = samplesProcessedInCurrentNote.toDouble() / sampleRate
+            // Verify if the current segment index is an active sound or a rest block
+            val isCurrentSegmentAnActiveNote = currentNoteIndex < isNoteList.size && isNoteList[currentNoteIndex]
 
-            val factor = when {
-                // 1. Attack Phase (Guaranteed attackEnd > 0.0 if this branch matches)
-                attackEnd > 0.0 && currentTime < attackEnd -> {
-                    currentTime / attackEnd
+            if (isCurrentSegmentAnActiveNote) {
+                // Apply standard envelope math relative strictly to the start of this NOTE
+                val currentTime = samplesProcessedInCurrentSegment.toDouble() / sampleRate
+
+                val factor = when {
+                    attackEnd > 0.0 && currentTime < attackEnd -> {
+                        currentTime / attackEnd
+                    }
+                    decayEnd > attackEnd && currentTime < decayEnd -> {
+                        val decayDuration = decayEnd - attackEnd
+                        1.0 - ((currentTime - attackEnd) / decayDuration) * (1.0 - sustain)
+                    }
+                    else -> sustain
                 }
-                // 2. Decay Phase (Guaranteed decayEnd > attackEnd if this branch matches)
-                decayEnd > attackEnd && currentTime < decayEnd -> {
-                    val decayDuration = decayEnd - attackEnd
-                    1.0 - ((currentTime - attackEnd) / decayDuration) * (1.0 - sustain)
-                }
-                // 3. Sustain Phase (Handles when currentTime >= decayEnd OR when phases are skipped)
-                else -> sustain
+                samples[i] *= factor
+            } else {
+                // It's a rest! Do not apply or advance an envelope calculation factor.
+                // The underlying stream is already silent, or we preserve raw track signal untouched.
             }
 
-            samples[i] *= factor
-            samplesProcessedInCurrentNote++
+            samplesProcessedInCurrentSegment++
         }
 
         return samples

@@ -26,11 +26,13 @@ class TextFileSongLoadingStrategy : SongLoadingStrategy {
         // Strict Header Validation
         val headerTokens = lines[0].split("\\s+".toRegex())
         if (headerTokens.size < 3) {
-            throw SongParsingException("Malformed Header: Expected '[sampleRate] [bitDepth] [tempo]', found '${lines[0]}'")
+            throw SongParsingException("Malformed Header: Expected '[sampleRate] [beatsPerMeasure] [tempo]', found '${lines[0]}'")
         }
 
         val sampleRate = headerTokens[0].toIntOrNull()
             ?: throw SongParsingException("Invalid Header: Sample rate '${headerTokens[0]}' must be a valid integer.")
+        val beatsPerMeasure = headerTokens[1].toIntOrNull()
+            ?: throw SongParsingException("Invalid Header: Beats per measure '${headerTokens[1]}' must be a valid integer.")
         val tempo = headerTokens[2].toIntOrNull()
             ?: throw SongParsingException("Invalid Header: Tempo '${headerTokens[2]}' must be a valid integer.")
 
@@ -71,15 +73,19 @@ class TextFileSongLoadingStrategy : SongLoadingStrategy {
 
             val notes = mutableListOf<Note>()
             val noteDurations = mutableListOf<Double>()
+            val isNoteList = mutableListOf<Boolean>()
 
             for (k in noteTokens.indices step 2) {
                 val pitch = noteTokens[k]
                 val durationStr = noteTokens[k + 1]
                 val duration = durationStr.toDoubleOrNull()
-                    ?: throw SongParsingException("Line $lineNumber: Note duration '$durationStr' must be a valid numeric double precision float.")
+                    ?: throw SongParsingException("Line $lineNumber: Note duration '$durationStr' must be a valid numeric float.")
 
                 notes.add(Note(pitch, duration))
                 noteDurations.add(duration)
+
+                // If the token is "-", it's a rest (false), otherwise it's a playable note (true)
+                isNoteList.add(pitch != "-")
             }
 
             // Explicit Decorator Construction Path
@@ -87,6 +93,7 @@ class TextFileSongLoadingStrategy : SongLoadingStrategy {
 
             // Create an unmodifiable structural snapshot of lengths for safe decorator closure injection
             val cleanDurationsSnapshot = noteDurations.toList()
+            val cleanIsNoteSnapshot = isNoteList.toList()
 
             for (j in 1 until configTokens.size) {
                 val effectToken = configTokens[j]
@@ -102,13 +109,22 @@ class TextFileSongLoadingStrategy : SongLoadingStrategy {
                     }
                     "ads" -> {
                         if (parts.size < 4) {
-                            throw SongParsingException("Line $lineNumber: Envelope '$effectToken' requires explicitly formatted parameters: ads\$attack\$decay\$sustain")
+                            throw SongParsingException($$"Line $$lineNumber: Envelope '$$effectToken' requires explicitly formatted parameters: ads$attack$decay$sustain")
                         }
                         val attack = parts[1].toDoubleOrNull() ?: throw SongParsingException("Line $lineNumber: Invalid attack: ${parts[1]}")
                         val decay = parts[2].toDoubleOrNull() ?: throw SongParsingException("Line $lineNumber: Invalid decay: ${parts[2]}")
                         val sustain = parts[3].toDoubleOrNull() ?: throw SongParsingException("Line $lineNumber: Invalid sustain: ${parts[3]}")
 
-                        effects.add { ADSDecorator(it, attack, decay, sustain, cleanDurationsSnapshot) }
+                        effects.add {
+                            ADSDecorator(
+                                it,
+                                attack,
+                                decay,
+                                sustain,
+                                cleanDurationsSnapshot,
+                                cleanIsNoteSnapshot
+                            )
+                        }
                     }
                     "tanh" -> {
                         val driveStr = parts.getOrNull(1) ?: throw SongParsingException("Line $lineNumber: Tanh missing drive profile.")
@@ -129,6 +145,6 @@ class TextFileSongLoadingStrategy : SongLoadingStrategy {
             channels.add(AudioChannel(notes, strategy, effects))
         }
 
-        return SongData(sampleRate, tempo, channels)
+        return SongData(sampleRate, beatsPerMeasure, tempo, channels)
     }
 }
