@@ -11,7 +11,7 @@ class SynthesizerIntegrationTests {
             44100 4 130
             saw tanh${'$'}8 clip${'$'}0.6|E3 .5 E3 .5 E3 .5 G3 .5 E3 .5 A3 .5 G3 .5 E3 .5|
             square vol${'$'}0.4 ads${'$'}.01${'$'}.3${'$'}.6|E2 4|
-        """.trimIndent() //[cite: 6]
+        """.trimIndent()
 
         // 2. Use the new in-memory loader method
         val strategy = TextFileSongStrategy()
@@ -25,8 +25,8 @@ class SynthesizerIntegrationTests {
         // with pre-loaded data or using the strategy output directly is the goal!)
 
         assertNotNull(songData)
-        assertEquals(130, songData.tempo) //[cite: 6]
-        assertEquals(2, songData.channels.size) //[cite: 6]
+        assertEquals(130, songData.tempo)
+        assertEquals(2, songData.channels.size)
     }
 
     /**
