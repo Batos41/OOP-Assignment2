@@ -6,6 +6,13 @@ class ADSDecorator(
     private val noteDurations: List<Double>
 ) : EffectDecorator(decoratedStream) {
 
+    init {
+        // Validation: Fail early if configurations violate physical constraints
+        require(attackEnd >= 0.0) { "Attack end time cannot be negative: $attackEnd" }
+        require(decayEnd >= attackEnd) { "Decay end time ($decayEnd) cannot be earlier than attack end ($attackEnd)" }
+        require(sustain in 0.0..1.0) { "Sustain level must be between 0.0 and 1.0: $sustain" }
+    }
+
     override fun getSamples(sampleRate: Int, tempo: Int): DoubleArray {
         val samples = super.getSamples(sampleRate, tempo)
 

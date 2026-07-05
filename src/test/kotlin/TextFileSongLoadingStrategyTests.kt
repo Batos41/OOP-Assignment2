@@ -34,9 +34,6 @@ class TextFileSongLoadingStrategyTests {
         val channel = songData.channels[0]
 
         // Generate the total sample buffer for this track
-        // 3 beats total (1 beat F4 + 2 beats rest) at 280 BPM
-        // Total duration = 3 * (60 / 280) = ~0.6428 seconds
-        // Total samples = ~0.6428 * 44100 = ~28350 samples
         val samples = channel.generateChannelSamples(sampleRate, tempo)
 
         // 1. Behavior Verification: Ensure audio data was generated
@@ -53,224 +50,157 @@ class TextFileSongLoadingStrategyTests {
 
     @Test
     fun testEmptyFileThrowsException() {
-        // Targets Line 7 branch in Screenshot 2026-07-03 231010.jpg
         val path = createTempSongFile("")
         val strategy = TextFileSongLoadingStrategy()
 
-        assertThrows<IllegalArgumentException> {
+        // Updated to catch our descriptive exception
+        assertThrows<SongParsingException> {
             strategy.load(path)
         }
     }
 
     @Test
-    fun testMissingTempoFallback() {
-        // Targets Line 11 fallback branch in Screenshot 2026-07-03 231010.jpg
+    fun testMissingTempoThrows() {
         val path = createTempSongFile("44100 8") // No third token for tempo
         val strategy = TextFileSongLoadingStrategy()
-        val songData = strategy.load(path)
 
-        assertEquals(120, songData.tempo) // Falls back to default 120
+        // Assert that a missing header parameter now properly crashes execution
+        assertThrows<SongParsingException> {
+            strategy.load(path)
+        }
     }
 
     @Test
-    fun testTrackLineMissingPipeAndUnknownStrategy() {
-        // Targets Lines 23-24 (no pipe) and Line 43 (else fallback wave)
-        // as well as Line 27 (skipping empty rows implicitly)
+    fun testTrackLineMissingPipeThrows() {
         val path = createTempSongFile("""
-        44100 8 120
-        unknownWave vol
-        
-    """)
+            44100 8 120
+            unknownWave vol
+        """)
         val strategy = TextFileSongLoadingStrategy()
-        val songData = strategy.load(path)
 
-        assertEquals(1, songData.channels.size)
-
-        // Verify that zero samples or standard silent fallback frames are handled safely:
-        val samples = songData.channels[0].generateChannelSamples(44100, 120)
-        assertNotNull(samples)
+        // Missing structural pipe indicator must fail fast
+        assertThrows<SongParsingException> {
+            strategy.load(path)
+        }
     }
 
     @Test
-    fun testMalformedEffectParametersFallback() {
-        // Targets Lines 61, 65, and 88 fallback branches
-        // where parameters are left completely blank or missing numeric text
+    fun testMalformedEffectParametersThrows() {
         val path = createTempSongFile("""
-        44100 8 120
-        sine vol$ ads$$$|C4|
-    """)
+            44100 8 120
+            sine vol$ ads$$$|C4|
+        """)
         val strategy = TextFileSongLoadingStrategy()
-        val songData = strategy.load(path)
 
-        assertEquals(1, songData.channels.size)
-        val channel = songData.channels[0]
-
-        // Check that the generated array matches the exact size boundary of a 1-beat fallback note
-        val samples = channel.generateChannelSamples(44100, 120)
-        val expectedSamplesCount = (1.0 * (60.0 / 120.0) * 44100).toInt()
-        assertEquals(expectedSamplesCount, samples.size, "Should fallback to 1 beat duration")
+        // Replaced silent fallback check with strict validation assertion
+        assertThrows<SongParsingException> {
+            strategy.load(path)
+        }
     }
 
     @Test
     fun testAllWaveformStrategiesCoverage() {
-        // Targets lines 38-41 in Screenshot 2026-07-03 231010.jpg
         val path = createTempSongFile("""
-        44100 8 120
-        square|C4 1|
-        whitenoise|C4 1|
-        saw|C4 1|
-    """)
+            44100 8 120
+            square|C4 1|
+            whitenoise|C4 1|
+            saw|C4 1|
+        """)
         val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         assertEquals(3, songData.channels.size)
-
-        // Explicitly validates the parsing paths for your different wave types
-        // (You can optionally assert their internal strategy types if exposed,
-        // but simply executing these lines fulfills the code coverage requirement)
-        assertNotNull(songData.channels[0]) // covered 'square'
-        assertNotNull(songData.channels[1]) // covered 'whitenoise'
-        assertNotNull(songData.channels[2]) // covered 'saw'
+        assertNotNull(songData.channels[0])
+        assertNotNull(songData.channels[1])
+        assertNotNull(songData.channels[2])
     }
 
     @Test
     fun testEmptyOrWhitespaceFileThrows() {
-        // Covers Line 7 (Red) in Screenshot 2026-07-03 231708.png
         val path = createTempSongFile("   \n   ")
         val strategy = TextFileSongLoadingStrategy()
 
-        assertThrows<IllegalArgumentException> {
+        assertThrows<SongParsingException> {
             strategy.load(path)
         }
     }
 
     @Test
-    fun testMalformedHeaderTempoFallback() {
-        // Covers Line 11 (Yellow) in Screenshot 2026-07-03 231708.png
-        // Case A: Missing entirely
-        val pathMissing = createTempSongFile("44100 8")
-        // Case B: Not an integer
+    fun testMalformedHeaderTempoThrows() {
         val pathInvalid = createTempSongFile("44100 8 abc")
-
         val strategy = TextFileSongLoadingStrategy()
 
-        assertEquals(120, strategy.load(pathMissing).tempo)
-        assertEquals(120, strategy.load(pathInvalid).tempo)
+        assertThrows<SongParsingException> {
+            strategy.load(pathInvalid)
+        }
     }
 
     @Test
-    fun testLineWithNoPipeDelimiter() {
-        // Covers Lines 21 & 22 (Yellow) else branches in Screenshot 2026-07-03 231708.png
+    fun testLineWithNoPipeDelimiterThrows() {
         val path = createTempSongFile("""
             44100 8 120
             saw vol$.8
         """)
         val strategy = TextFileSongLoadingStrategy()
-        val songData = strategy.load(path)
 
-        // It processes the line as pure config with an empty notes array
-        assertEquals(1, songData.channels.size)
+        assertThrows<SongParsingException> {
+            strategy.load(path)
+        }
     }
 
     @Test
-    fun testEmptyConfigTriggersContinue() {
-        // Covers Line 25 (Red) continue branch in Screenshot 2026-07-03 231708.png
+    fun testEmptyConfigThrowsInsteadOfContinue() {
         val path = createTempSongFile("""
             44100 8 120
             | F4 1 A4 1
         """)
         val strategy = TextFileSongLoadingStrategy()
-        val songData = strategy.load(path)
 
-        // The malformed row is skipped cleanly, leaving 0 valid channels
-        assertEquals(0, songData.channels.size)
+        // Lines starting with an empty gutter space are invalid
+        assertThrows<SongParsingException> {
+            strategy.load(path)
+        }
     }
 
     @Test
     fun testFileWithMixedWhitespaceLines() {
-        // This explicitly exercises the .trim() changes and the .isNotEmpty() filtering
         val path = createTempSongFile("""
-        44100 8 120
-          saw vol$.8|C4 1|   
-        
-             
-        square vol$.4|E4 1|
-    """)
+            44100 8 120
+              saw |C4 1|   
+            
+                 
+            square |E4 1|
+        """)
         val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
-        // It should strip the blank lines and whitespace, finding exactly 2 channels
         assertEquals(2, songData.channels.size)
     }
 
     @Test
-    fun testConfigTokensEmptyGutterCoverage() {
-        // Case 1: configTokens.isEmpty() is true
-        // This happens if a line begins immediately with a pipe, leaving nothing before it
-        val path1 = createTempSongFile("""
-        44100 8 120
-        | F4 1
-    """)
-
-        // Case 2: configTokens.isEmpty() is false, but configTokens[0].isEmpty() is true
-        // This happens if there are spaces before the pipe, but no actual strategy token
-        val path2 = createTempSongFile("""
-        44100 8 120
-          | A4 1
-    """)
-
+    fun testConfigTokensEmptyGutterThrows() {
+        val path = createTempSongFile("""
+            44100 8 120
+              | A4 1
+        """)
         val strategy = TextFileSongLoadingStrategy()
 
-        // Both should trigger the 'continue' guard clause and skip the malformed tracks cleanly
-        assertEquals(0, strategy.load(path1).channels.size)
-        assertEquals(0, strategy.load(path2).channels.size)
+        assertThrows<SongParsingException> {
+            strategy.load(path)
+        }
     }
 
     @Test
-    fun testAdsParameterFallbacksCoverage() {
-        // We use ${'$'} to safely embed literal dollar signs without breaking string compilation
+    fun testAdsParameterFallbacksThrows() {
         val dollar = '$'
         val path = createTempSongFile("""
-        44100 8 120
-        sine ads${dollar}
-        sine ads${dollar}.01
-        sine ads${dollar}.01${dollar}.2
-        sine ads${dollar}invalid${dollar}bad${dollar}wrong
-    """)
+            44100 8 120
+            sine ads${dollar}
+        """)
         val strategy = TextFileSongLoadingStrategy()
-        val songData = strategy.load(path)
 
-        // Verifies all 4 edge cases successfully fallback to defaults
-        assertEquals(4, songData.channels.size)
-    }
-
-    @Test
-    fun testEffectsParametersAndClosuresFullCoverage() {
-        // Targets everything in Screenshot 2026-07-03 232406.png
-        val d = '$'
-
-        val path = createTempSongFile(
-            "44100 8 120\n" +
-                    "sine vol\n" +                       // Tests vol fallback (?: 1.0)
-                    "sine vol" + d + "invalid\n" +       // Tests vol malformed conversion
-                    "sine ads" + d + "\n" +              // Tests attack, decay, sustain fallbacks
-                    "sine ads" + d + ".01\n" +
-                    "sine ads" + d + ".01" + d + ".2\n" +
-                    "sine ads" + d + "invalid" + d + "bad" + d + "wrong|C4 1|\n"
-        )
-
-        val strategy = TextFileSongLoadingStrategy()
-        val songData = strategy.load(path)
-
-        assertEquals(6, songData.channels.size)
-
-        // CRITICAL STEP: Evaluate the samples for each channel.
-        // This forces the lambda closures to execute and evaluate the local
-        // captured primitive variables, turning lines 42, 46, 47, and 48 completely green.
-        for (channel in songData.channels) {
-            // Evaluate at least 1 sample to run the internal decorator pipeline
-            val stream = channel.generateChannelSamples(44100, 120)
-            assertNotNull(stream)
+        assertThrows<SongParsingException> {
+            strategy.load(path)
         }
     }
 
@@ -279,19 +209,156 @@ class TextFileSongLoadingStrategyTests {
         val d = '$'
         val path = createTempSongFile(
             "44100 4 130\n" +
-                    "saw tanh" + d + "8 clip" + d + "0.6|E3 .5|\n" +
-                    "saw tanh" + d + "invalid clip" + d + "\n"
+                    "saw tanh${d}8 clip${d}0.6|E3 .5|\n"
         )
 
         val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
-        assertEquals(2, songData.channels.size)
+        assertEquals(1, songData.channels.size)
 
-        // Evaluate the streams to execute the inline lambda branch logics completely
         for (channel in songData.channels) {
             val stream = channel.generateChannelSamples(44100, 130)
             assertNotNull(stream)
         }
+    }
+
+    @Test
+    fun testThrowIfFileNotFound() {
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> {
+            strategy.load("non_existent_file_path_xyz.txt")
+        }
+
+        // Simply check the exception text for the missing file context
+        val message = exception.message ?: ""
+        assertTrue(message.contains("not found") || message.contains("Failed to read"))
+    }
+
+    @Test
+    fun testThrowOnMalformedHeaderSize() {
+        val path = createTempSongFile("44100")
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        // Check message or the cause message depending on where your code attaches it
+        val actualErrorText = exception.message ?: exception.cause?.message ?: ""
+        assertTrue(
+            actualErrorText.contains("Malformed Header") || actualErrorText.contains("parse"),
+            "Expected header size validation failure context, but got: $actualErrorText"
+        )
+    }
+
+    @Test
+    fun testThrowOnInvalidSampleRateToken() {
+        val path = createTempSongFile("abc 8 120")
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        // If your parser throws due to NumberFormatException, it will be wrapped in the cause!
+        val hasNumberFormatError = exception.cause is java.lang.NumberFormatException
+        val hasSampleRateText = exception.message!!.contains("Sample rate") || exception.cause?.message?.contains("abc") == true
+
+        assertTrue(
+            hasNumberFormatError || hasSampleRateText,
+            "Expected sample rate integer parsing failure. Cause: ${exception.cause}"
+        )
+    }
+
+    @Test
+    fun testThrowOnInvalidTempoToken() {
+        val path = createTempSongFile("44100 8 xyz")
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        val hasNumberFormatError = exception.cause is java.lang.NumberFormatException
+        val hasTempoText = exception.message!!.contains("Tempo") || exception.cause?.message?.contains("xyz") == true
+
+        assertTrue(
+            hasNumberFormatError || hasTempoText,
+            "Expected tempo integer parsing failure. Cause: ${exception.cause}"
+        )
+    }
+
+    @Test
+    fun testThrowOnInvalidNoteDurationFormat() {
+        val path = createTempSongFile("""
+            44100 8 120
+            sin | C4 abc
+        """)
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        // Extract the message from the nested cause exception
+        val nestedCause = exception.cause
+        assertNotNull(nestedCause, "The parsing exception should be wrapped as the cause")
+
+        val causeMessage = nestedCause?.message ?: ""
+        assertTrue(causeMessage.contains("duration") && causeMessage.contains("abc"))
+    }
+
+    @Test
+    fun testThrowOnIncompleteMusicalNotesPairs() {
+        // Line 69: Uneven tokens block (Pitch without its corresponding duration value)[cite: 7]
+        val path = createTempSongFile("""
+            44100 8 120
+            sin | C4 1 E4
+        """)
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        val causeMessage = exception.cause?.message ?: ""
+        assertTrue(causeMessage.contains("Incomplete musical notes data block"))
+    }
+
+    @Test
+    fun testThrowOnVolumeEffectMissingLevel() {
+        // Line 95: 'vol' token missing the second part after a '$' splitting delimiter[cite: 7]
+        val path = createTempSongFile("""
+            44100 8 120
+            sin vol | C4 1
+        """)
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        val causeMessage = exception.cause?.message ?: ""
+        assertTrue(causeMessage.contains("missing level property"))
+    }
+
+    @Test
+    fun testThrowOnVolumeEffectMalformedLevel() {
+        // Line 97: Volume text cannot be parsed into a Double precision number[cite: 7]
+        val path = createTempSongFile("""
+            44100 8 120
+            sin vol${'$'}notANumber | C4 1
+        """)
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        val causeMessage = exception.cause?.message ?: ""
+        assertTrue(causeMessage.contains("is not a valid number"))
+    }
+
+    @Test
+    fun testThrowOnEnvelopeIncompleteParameters() {
+        // Line 103: 'ads' parameter count is less than 4 (e.g. ads${'$'}0.1${'$'}0.2)[cite: 7]
+        val path = createTempSongFile("""
+            44100 8 120
+            sin ads${'$'}0.1${'$'}0.2 | C4 1
+        """)
+        val strategy = TextFileSongLoadingStrategy()
+
+        val exception = assertThrows<SongParsingException> { strategy.load(path) }
+
+        val causeMessage = exception.cause?.message ?: ""
+        assertTrue(causeMessage.contains("requires explicitly formatted parameters"))
     }
 }

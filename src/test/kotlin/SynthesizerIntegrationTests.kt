@@ -18,7 +18,7 @@ class SynthesizerIntegrationTests {
         val songData = strategy.loadFromString(trackContent)
 
         // 3. Feed it to your existing Synthesizer structure to test the full pipeline
-        val synth = Synthesizer(sampleRate = 44100, loadingStrategy = strategy)
+        val synth = Synthesizer(loadingStrategy = strategy)
 
         // (If your synthesizer needs to internally call load() via sourceIdentifier,
         // you can subclass or pass a dummy file identifier, but executing synth.play()

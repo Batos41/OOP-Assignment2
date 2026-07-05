@@ -15,8 +15,8 @@ class SynthesizerTests {
 
     @Test
     fun testEmptySongReturnsEmptyBuffer() {
-        val emptyStrategy = MockSongLoadingStrategy(SongData(tempo = 120, channels = emptyList()))
-        val synth = Synthesizer(sampleRate, emptyStrategy)
+        val emptyStrategy = MockSongLoadingStrategy(SongData(sampleRate = sampleRate, tempo = 120, channels = emptyList()))
+        val synth = Synthesizer(emptyStrategy)
 
         synth.loadSong("any_dummy_path_string")
         val output = synth.generateMixedChannels()
@@ -31,9 +31,9 @@ class SynthesizerTests {
         val channel1 = AudioChannel(notes, ConstantWaveStrategy(0.8))
         val channel2 = AudioChannel(notes, ConstantWaveStrategy(0.2))
 
-        val stubbedSong = SongData(tempo = 120, channels = listOf(channel1, channel2))
+        val stubbedSong = SongData(sampleRate = sampleRate, tempo = 120, channels = listOf(channel1, channel2))
         val mockStrategy = MockSongLoadingStrategy(stubbedSong)
-        val synth = Synthesizer(sampleRate, mockStrategy)
+        val synth = Synthesizer(mockStrategy)
 
         // Act
         synth.loadSong("mock_path")
@@ -52,9 +52,9 @@ class SynthesizerTests {
         val shortChannel = AudioChannel(listOf(Note("A4", 1.0)), ConstantWaveStrategy(0.6))
         val longChannel = AudioChannel(listOf(Note("A4", 2.0)), ConstantWaveStrategy(0.4))
 
-        val stubbedSong = SongData(tempo = 120, channels = listOf(shortChannel, longChannel))
+        val stubbedSong = SongData(sampleRate, tempo = 120, channels = listOf(shortChannel, longChannel))
         val mockStrategy = MockSongLoadingStrategy(stubbedSong)
-        val synth = Synthesizer(sampleRate, mockStrategy)
+        val synth = Synthesizer(mockStrategy)
 
         // Act
         synth.loadSong("mock_path")
@@ -63,6 +63,6 @@ class SynthesizerTests {
         // Assert
         assertEquals(1000, output.size)
         assertEquals(0.5, output[200], 0.0001)  // Both channels active
-        assertEquals(0.2, output[750], 0.0001)  // Only long channel active
+        assertEquals(0.4, output[750], 0.0001)  // Only long channel active
     }
 }

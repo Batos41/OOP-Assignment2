@@ -1,7 +1,8 @@
 class Synthesizer(
-    private val sampleRate: Int,
     private val loadingStrategy: SongLoadingStrategy
 ) {
+    var sampleRate: Int = 44100
+    private set
     private var tempo: Int = 120
     private var channels: List<AudioChannel> = emptyList()
 
@@ -11,6 +12,7 @@ class Synthesizer(
      */
     fun loadSong(sourceIdentifier: String) {
         val songData = loadingStrategy.load(sourceIdentifier)
+        this.sampleRate = songData.sampleRate
         this.tempo = songData.tempo
         this.channels = songData.channels
     }
@@ -26,12 +28,21 @@ class Synthesizer(
 
         for (i in 0 until maxSamples) {
             var sampleSum = 0.0
+            var activeChannelsCount = 0 // Track how many channels are contributing sound at index i
+
             for (buffer in channelBuffers) {
                 if (i < buffer.size) {
                     sampleSum += buffer[i]
+                    activeChannelsCount++ // This channel is active at this sample index!
                 }
             }
-            masterMixedBuffer[i] = sampleSum / channels.size
+
+            // Avoid division by zero if all tracks have ended but we are clearing trailing frames
+            masterMixedBuffer[i] = if (activeChannelsCount > 0) {
+                sampleSum / activeChannelsCount
+            } else {
+                0.0
+            }
         }
 
         return masterMixedBuffer
