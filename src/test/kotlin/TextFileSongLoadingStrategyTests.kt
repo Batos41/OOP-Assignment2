@@ -3,7 +3,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.assertThrows
 import java.io.File
 
-class TextFileSongStrategyTests {
+class TextFileSongLoadingStrategyTests {
 
     private fun createTempSongFile(content: String): String {
         return File.createTempFile("test_song", ".txt").apply {
@@ -20,7 +20,7 @@ class TextFileSongStrategyTests {
                 saw vol$.8 ads$.01$.2$.1|F4 1 - 2|
             """)
 
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val tempo = 280
 
         // Act
@@ -50,7 +50,7 @@ class TextFileSongStrategyTests {
     fun testEmptyFileThrowsException() {
         // Targets Line 7 branch in Screenshot 2026-07-03 231010.jpg
         val path = createTempSongFile("")
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
 
         assertThrows<IllegalArgumentException> {
             strategy.load(path)
@@ -61,7 +61,7 @@ class TextFileSongStrategyTests {
     fun testMissingTempoFallback() {
         // Targets Line 11 fallback branch in Screenshot 2026-07-03 231010.jpg
         val path = createTempSongFile("44100 8") // No third token for tempo
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         assertEquals(120, songData.tempo) // Falls back to default 120
@@ -76,7 +76,7 @@ class TextFileSongStrategyTests {
         unknownWave vol
         
     """)
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         assertEquals(1, songData.channels.size)
@@ -92,7 +92,7 @@ class TextFileSongStrategyTests {
         44100 8 120
         sine vol$ ads$$$|C4|
     """)
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         assertEquals(1, songData.channels.size)
@@ -113,7 +113,7 @@ class TextFileSongStrategyTests {
         whitenoise|C4 1|
         saw|C4 1|
     """)
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         assertEquals(3, songData.channels.size)
@@ -130,7 +130,7 @@ class TextFileSongStrategyTests {
     fun testEmptyOrWhitespaceFileThrows() {
         // Covers Line 7 (Red) in Screenshot 2026-07-03 231708.png
         val path = createTempSongFile("   \n   ")
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
 
         assertThrows<IllegalArgumentException> {
             strategy.load(path)
@@ -145,7 +145,7 @@ class TextFileSongStrategyTests {
         // Case B: Not an integer
         val pathInvalid = createTempSongFile("44100 8 abc")
 
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
 
         assertEquals(120, strategy.load(pathMissing).tempo)
         assertEquals(120, strategy.load(pathInvalid).tempo)
@@ -158,7 +158,7 @@ class TextFileSongStrategyTests {
             44100 8 120
             saw vol$.8
         """)
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         // It processes the line as pure config with an empty notes array
@@ -173,7 +173,7 @@ class TextFileSongStrategyTests {
             44100 8 120
             | F4 1 A4 1
         """)
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         // The malformed row is skipped cleanly, leaving 0 valid channels
@@ -190,7 +190,7 @@ class TextFileSongStrategyTests {
              
         square vol$.4|E4 1|
     """)
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         // It should strip the blank lines and whitespace, finding exactly 2 channels
@@ -213,7 +213,7 @@ class TextFileSongStrategyTests {
           | A4 1
     """)
 
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
 
         // Both should trigger the 'continue' guard clause and skip the malformed tracks cleanly
         assertEquals(0, strategy.load(path1).channels.size)
@@ -231,7 +231,7 @@ class TextFileSongStrategyTests {
         sine ads${dollar}.01${dollar}.2
         sine ads${dollar}invalid${dollar}bad${dollar}wrong
     """)
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         // Verifies all 4 edge cases successfully fallback to defaults
@@ -253,7 +253,7 @@ class TextFileSongStrategyTests {
                     "sine ads" + d + "invalid" + d + "bad" + d + "wrong|C4 1|\n"
         )
 
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         assertEquals(6, songData.channels.size)
@@ -277,7 +277,7 @@ class TextFileSongStrategyTests {
                     "saw tanh" + d + "invalid clip" + d + "\n"
         )
 
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.load(path)
 
         assertEquals(2, songData.channels.size)

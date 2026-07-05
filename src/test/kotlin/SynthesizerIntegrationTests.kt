@@ -2,7 +2,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 
 class SynthesizerIntegrationTests {
-    private val strategy = TextFileSongStrategy()
+    private val strategy = TextFileSongLoadingStrategy()
 
     @Test
     fun testMultiChannelWithDecoratorsIntegration() {
@@ -14,7 +14,7 @@ class SynthesizerIntegrationTests {
         """.trimIndent()
 
         // 2. Use the new in-memory loader method
-        val strategy = TextFileSongStrategy()
+        val strategy = TextFileSongLoadingStrategy()
         val songData = strategy.loadFromString(trackContent)
 
         // 3. Feed it to your existing Synthesizer structure to test the full pipeline

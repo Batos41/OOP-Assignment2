@@ -1,6 +1,6 @@
 import java.io.File
 
-class TextFileSongStrategy : SongLoadingStrategy {
+class TextFileSongLoadingStrategy : SongLoadingStrategy {
 
     // 1. Production entry point (unchanged from the original file contract)
     override fun load(source: String): SongData {

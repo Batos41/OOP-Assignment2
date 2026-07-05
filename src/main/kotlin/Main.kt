@@ -8,7 +8,7 @@ fun main(args: Array<String>) {
     val sampleRate = 44100
 
     // 1. Initialize your engine with the desired strategy
-    val strategy = TextFileSongStrategy()
+    val strategy = TextFileSongLoadingStrategy()
     val synth = Synthesizer(sampleRate = sampleRate, loadingStrategy = strategy)
 
     println("[INFO] Loading track configurations...")
